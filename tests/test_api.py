@@ -590,6 +590,70 @@ class TestInvalid(util.TestCase):
         with self.assertRaises(TypeError):
             sv.filter('div', "not a tag", flags=flags)
 
+    def test_excessive_selectors(self):
+        """Test excessive selectors."""
+
+        # Build a 500 KB selector string: "a,a,a,...,a" (250,000 items)
+        count = 10000
+        selector = ",".join("a" for _ in range(count))
+
+        # Compile the selector
+        with self.assertRaises(ValueError):
+            sv.compile(selector)
+
+    def test_excessive_custom_selectors(self):
+        """Test excessive custom selectors."""
+
+        # Build a 500 KB selector string: "a,a,a,...,a" (250,000 items)
+        count = 10000
+        selector = ",".join("a" for _ in range(count))
+
+        # Compile the selector
+        with self.assertRaises(ValueError):
+            sv.compile('div:--custom', custom={':--custom': selector})
+
+    def test_excessive_custom_and_normal_selectors(self):
+        """Test excessive custom and normal selectors."""
+
+        count = 5000
+        selector = ",".join("a" for _ in range(count))
+
+        # Compile the selector
+        with self.assertRaises(ValueError):
+            sv.compile(f':is({selector}):--custom', custom={':--custom': selector})
+
+    def test_excessive_reused_custom_selectors(self):
+        """Test that reusing a custom selector counts its full expansion each time."""
+
+        # 100 small selectors in the custom selector, reused 100 times (only ~100 tokens in the pattern).
+        selector = ",".join("a" for _ in range(100))
+
+        with self.assertRaises(ValueError):
+            sv.compile('div' + ':--custom' * 100, custom={':--custom': selector})
+
+    def test_excessive_builtin_pseudo_class_selectors(self):
+        """Test that built-in pseudo-classes count their full expansion."""
+
+        # Each `:disabled` expands into a precompiled list of dozens of selectors.
+        with self.assertRaises(ValueError):
+            sv.compile('input' + ':disabled' * 500)
+
+        # Each `:read-only` expands into `:read-write` which expands further.
+        with self.assertRaises(ValueError):
+            sv.compile('input' + ':read-only' * 500)
+
+    def test_selectors_at_limit(self):
+        """Test that selectors up to the limit still compile."""
+
+        selector = ",".join("a" for _ in range(8192))
+        self.assertEqual(len(sv.compile(selector).selectors), 8192)
+
+        with self.assertRaises(ValueError):
+            sv.compile(selector + ",a")
+
+        # Common usage of built-in and custom pseudo-classes is unaffected.
+        sv.compile('input:disabled, input:enabled, input:read-only, a:any-link, :--custom', custom={':--custom': 'b'})
+
 
 class TestSyntaxErrorReporting(util.TestCase):
     """Test reporting of syntax errors."""
